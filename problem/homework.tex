@@ -1,0 +1,90 @@
+\documentclass[11pt,a4j]{jsarticle}
+
+\title{インターンシップ課題}
+\author{北谷 俊介}
+\date{2016/07/05}
+
+\begin{document}
+  \maketitle
+
+  \section*{課題}
+  ユーザにおすすめの映画をレコメンドするシステムを作りたいと考えています。
+  レコメンドシステムについて、以下の問いに答えてください。
+
+  \section*{問1}
+  レコメンドシステムを実現する際に有用と思われるアルゴリズムや手段をひとつ挙げ、説明してください。
+    \subsection*{Collaborative Filtering - user-user memory-based method}
+    Collaborative Filtering では、「Active Userが観た映画を評価したデータ」と「それ以外のUserがそれぞれ観た映画を評価したデータ」を用いて、そのパターンから人同士の類似性を計算し、Active Userと似ているUserの評価履歴から、Active Userが高い評価をするであろう映画を推薦する。
+    memory-based method では、システムが利用される以前は何もせず、利用者データベースを保持するのみである。推薦をするときに、データベース中のデータとActive Userの嗜好データを併せて予測を行う。推薦の過程は、主に以下の2段階となる。
+
+    \subsection*{類似度の計算 - Pearson相関}
+    データベース中の各UserとActive Userの嗜好の類似度を求める。類似度とは、嗜好パターンがどれくらい似ているかを定量化したものである。
+
+    まず、記号の定義をする。n人の全Userの集合を$\mathcal{X} = \{1, ... ,n\}$, m種類のアイテムの集合を$\mathcal{Y} = \{1, ... ,m\}$とする。
+    評価値行列$\bf{R}$は利用者$x \in \mathcal{X}$の、アイテム$y \in \mathcal{Y}$への評価値$r_{xy}$を要素とする行列である。
+    $r_{xy}$は評価済みならば評価域1〜5のいずれかの値をとり、未評価なら0をとる。Active Userを添字$a$で表す。すなわち、$r_{ay}$はActive Userのアイテム$y$への評価値である。
+    また、User $x$が評価済みのアイテムの集合を$\mathcal{Y}_{x} = \{y \mid y \in \mathcal{Y}, r_{xy} \neq 0\}$で表す。
+
+    Active User $a$と他のUser $x$の類似度は、共通に評価しているアイテムについてのPearson相関で測る。
+
+    \begin{equation}
+      \rho_{ax} = \frac{\sum_{y \in \mathcal{Y}_{ax}}(r_{ay} - \bar{r}'_{a})(r_{xy} - \bar{r}'_{x})}{\sqrt{\sum_{y \in \mathcal{Y}_{ax}}(r_{ay} - \bar{r}'_{a})^2} \sqrt{\sum_{y \in \mathcal{Y}_{ax}}(r_{xy} - \bar{r}'_{x})^2}}
+    \end{equation}
+
+    ただし、$\mathcal{Y}_{ax}$は$a$と$x$が共通に評価したアイテムの集合、すなわち、$\mathcal{Y}_{ax} = \mathcal{Y}_{a} \cap \mathcal{Y}_{x}$で、$\bar{r}'_{x} = \sum_{y \in \mathcal{Y}} r_{xy} / |\mathcal{Y}_{ax}|$である。なお、$a$と$x$が共通に評価したアイテムがひとつ以下ならば、Pearson相関は計算できないので$\rho_{ax} = 0$とする。
+
+    \subsection*{評価値の予測 - 加重平均}
+    Active Userが知らないアイテムについて、それらのアイテムへの各Userの好みとActive Userとの間の類似度に基づいて、Active Userがどれくらいそのアイテムを好むかを予測する。
+    アイテム$y \notin \mathcal{Y}_{a}$の評価値は、式(1)の類似度で重み付けした、各Userのアイテム$y$への評価値の加重平均で予測する。
+
+    \begin{equation}
+      \hat{r}_{ay} = \bar{r}_{a} + \frac{\sum_{x \in \mathcal{X}_{y}} \rho_{ax} (r_{xy} - \bar{r}'_{x})}{\sum_{x \in \mathcal{X}_{y}} |\rho_{ax}|}
+    \end{equation}
+    ただし、$\mathcal{X}_{y}$はアイテム$y$を評価済みのUserの集合で、$\bar{r}_{x}$はUser $x$の全評価アイテムに対する平均評価値$\sum_{y \in \mathcal{Y}_{x}} r_{xy} / |\mathcal{Y}_{x}|$である。
+
+    \subsection*{推薦}
+    最後に、推測した評価値が高い順にアイテムをソートし、予測評価値が最も高いアイテムを推薦する。
+
+\newpage
+
+  \section*{問2}
+  問1で挙げた手法を実装してください。
+    \subsection*{Github リポジトリ}
+    https://github.com/ShunsukeKitaya/recommend
+
+\newpage
+
+  \section*{問3}
+  問2で実装した手法の改善点を挙げ、説明してください。
+    \subsection*{評価値の正規化}
+    全ての計算の前に、評価値$r_{xy}$からユーザ$x$の平均評価値$\bar{r}_x$を引いて正規化する。
+    これにより、肯定的でも否定的でもない評価値が0に正規化され、計測された評価値のゆらぎや偏りによる不整合が緩和される。
+
+    \subsection*{処理速度の改善}
+    memory-based method では、利用者が求めるたびにその都度類似度と予測評価値の計算を行う。
+    推薦のたびに逐一計算をやり直していては処理に時間がかかる。
+    そこで、各Userに個人モデルを作成し、Active Userとその他のUserの個人モデルが一致する確率を類似度とする(つまり、部分的に協調フィルタリング-モデルベース法を用いる)ことで、類似度をあらかじめ計算しておく。
+    これにより、推薦の高速化が見込まれる。
+
+    \subsection*{新しいUser}
+    アイテムをひとつも評価していない新規の利用者が現れた場合、アイテムを推薦することができない。
+    例外的にitem-item based methodを用いることでアイテムの類似度を計算し、推薦することができる。
+
+    \subsection*{疎な行列}
+    レコメンドシステムにて扱う行列データが非常に疎である場合、うまくレコメンドができない場合がある。
+    ほとんど評価されていないアイテムやほとんどアイテムを評価していないUserには、他の要素との評価の重なりが少ないために有効な推薦ができない。
+    この問題に対処するための手法として、主成分分析などの行列分解手法によって次元を縮約することが考えられる。
+    次元削減の前処理を行うことで実質的に似たUserをクラスタリングすることができるはずである。
+
+\newpage
+
+\begin{thebibliography}{12}
+\bibitem{001}
+  神嶌 敏弘, "推薦システムのアルゴリズム", \\
+  http://www.kamishima.net/archive/recsysdoc.pdf
+\bibitem{002}
+  Xiaoyuan Su, Taghi M. Khoshgoftaar, "A survey of collaborative filtering techniques", Journal Advances in Artificial Intelligence, 2009
+\end{thebibliography}
+
+\end{document}
+
